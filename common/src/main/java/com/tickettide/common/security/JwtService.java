@@ -4,6 +4,7 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -31,6 +32,7 @@ public class JwtService {
     private final Duration ttl;
     private final Clock clock;
 
+    @Autowired
     public JwtService(@Value("${tickettide.jwt.secret}") String secret,
                       @Value("${tickettide.jwt.ttl:PT2H}") Duration ttl) {
         this(secret, ttl, Clock.systemUTC());
