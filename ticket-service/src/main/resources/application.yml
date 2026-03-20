@@ -1,0 +1,35 @@
+server:
+  port: ${PORT:8083}
+
+spring:
+  application:
+    name: ticket-service
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/tickettide_tickets}
+    username: ${DB_USERNAME:tickettide}
+    password: ${DB_PASSWORD:tickettide}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+
+tickettide:
+  jwt:
+    secret: ${JWT_SECRET}
+  internal:
+    api-key: ${INTERNAL_API_KEY}
+  services:
+    event-url: ${EVENT_SERVICE_URL:http://localhost:8082}
+    notification-url: ${NOTIFICATION_SERVICE_URL:http://localhost:8085}
+  orders:
+    hold-duration: ${ORDER_HOLD_DURATION:PT10M}
+    max-quantity: 10
+    expiry-sweep-interval-ms: 30000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
