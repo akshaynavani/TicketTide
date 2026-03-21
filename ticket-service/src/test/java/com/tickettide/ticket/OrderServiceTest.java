@@ -32,6 +32,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -77,7 +78,7 @@ class OrderServiceTest {
     void createRejectsOversizedOrdersWithoutTouchingInventory() {
         assertThatThrownBy(() -> service.create(new CreateOrderRequest(ticketTypeId, 11), buyer))
                 .isInstanceOf(ApiException.class);
-        verify(eventClient, never()).reserve(any(), any(Integer.class));
+        verify(eventClient, never()).reserve(any(), anyInt());
     }
 
     @Test
@@ -159,7 +160,7 @@ class OrderServiceTest {
         assertThatThrownBy(() -> service.cancel(order.getId(), stranger))
                 .isInstanceOf(ApiException.class)
                 .extracting(e -> ((ApiException) e).status()).isEqualTo(HttpStatus.NOT_FOUND);
-        verify(eventClient, never()).release(any(), any(Integer.class));
+        verify(eventClient, never()).release(any(), anyInt());
     }
 
     @Test
