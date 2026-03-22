@@ -1,0 +1,30 @@
+server:
+  port: ${PORT:8084}
+
+spring:
+  application:
+    name: payment-service
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/tickettide_payments}
+    username: ${DB_USERNAME:tickettide}
+    password: ${DB_PASSWORD:tickettide}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+
+tickettide:
+  jwt:
+    secret: ${JWT_SECRET}
+  internal:
+    api-key: ${INTERNAL_API_KEY}
+  services:
+    ticket-url: ${TICKET_SERVICE_URL:http://localhost:8083}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
