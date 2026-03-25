@@ -61,7 +61,7 @@ Files: `payment-service/**`, `notification-service/**`.
 
 ## Phase 5 — Containers, gateway, AWS infrastructure, docs
 Deliverables:
-- Multi-stage Dockerfile per service, `docker-compose.yml` (PostgreSQL, LocalStack S3, nginx gateway, five services), `.env.example`.
+- Shared multi-stage Dockerfile (`--build-arg SERVICE=...`) for all services, `docker-compose.yml` (PostgreSQL, LocalStack S3, nginx gateway, five services), `.env.example`.
 - AWS: Terraform for VPC, EC2 Docker host (user-data runs compose), RDS PostgreSQL, S3 bucket, API Gateway HTTP API routes.
 - `.gitignore`, README with architecture diagram, run and test instructions.
 
