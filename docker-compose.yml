@@ -1,0 +1,113 @@
+name: tickettide
+
+x-service-env: &service-env
+  JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+  INTERNAL_API_KEY: ${INTERNAL_API_KEY:?set INTERNAL_API_KEY in .env}
+  DB_USERNAME: ${DB_USERNAME:-tickettide}
+  DB_PASSWORD: ${DB_PASSWORD:-tickettide}
+
+x-service: &service
+  restart: unless-stopped
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${DB_USERNAME:-tickettide}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-tickettide}
+      POSTGRES_DB: postgres
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres-init.sql:/docker-entrypoint-initdb.d/01-databases.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-tickettide}"]
+      interval: 5s
+      retries: 10
+
+  localstack:
+    image: localstack/localstack:3.8
+    environment:
+      SERVICES: s3
+      S3_BUCKET: ${S3_BUCKET:-tickettide-event-media}
+    volumes:
+      - ./docker/localstack-init.sh:/etc/localstack/init/ready.d/init-s3.sh:ro
+    ports:
+      - "4566:4566"
+
+  auth-service:
+    <<: *service
+    build: { context: ., args: { SERVICE: auth-service } }
+    environment:
+      <<: *service-env
+      PORT: 8081
+      DB_URL: jdbc:postgresql://postgres:5432/tickettide_auth
+      JWT_TTL: ${JWT_TTL:-PT2H}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+
+  event-service:
+    <<: *service
+    build: { context: ., args: { SERVICE: event-service } }
+    depends_on:
+      postgres:
+        condition: service_healthy
+      localstack:
+        condition: service_started
+    environment:
+      <<: *service-env
+      PORT: 8082
+      DB_URL: jdbc:postgresql://postgres:5432/tickettide_events
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-test}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-test}
+      S3_BUCKET: ${S3_BUCKET:-tickettide-event-media}
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://localstack:4566}
+
+  ticket-service:
+    <<: *service
+    build: { context: ., args: { SERVICE: ticket-service } }
+    environment:
+      <<: *service-env
+      PORT: 8083
+      DB_URL: jdbc:postgresql://postgres:5432/tickettide_tickets
+      EVENT_SERVICE_URL: http://event-service:8082
+      NOTIFICATION_SERVICE_URL: http://notification-service:8085
+      ORDER_HOLD_DURATION: ${ORDER_HOLD_DURATION:-PT10M}
+
+  payment-service:
+    <<: *service
+    build: { context: ., args: { SERVICE: payment-service } }
+    environment:
+      <<: *service-env
+      PORT: 8084
+      DB_URL: jdbc:postgresql://postgres:5432/tickettide_payments
+      TICKET_SERVICE_URL: http://ticket-service:8083
+
+  notification-service:
+    <<: *service
+    build: { context: ., args: { SERVICE: notification-service } }
+    environment:
+      <<: *service-env
+      PORT: 8085
+      DB_URL: jdbc:postgresql://postgres:5432/tickettide_notifications
+
+  gateway:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "8080:8080"
+    depends_on:
+      - auth-service
+      - event-service
+      - ticket-service
+      - payment-service
+      - notification-service
+
+volumes:
+  pgdata:
