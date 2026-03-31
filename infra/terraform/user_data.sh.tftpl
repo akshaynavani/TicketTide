@@ -1,0 +1,92 @@
+#!/bin/bash
+# Boots the Docker host: installs Docker, pulls secrets from SSM, creates the
+# per-service databases on RDS and starts all five services from ECR.
+set -euo pipefail
+
+dnf install -y docker
+systemctl enable --now docker
+mkdir -p /usr/local/lib/docker/cli-plugins
+curl -fsSL "https://github.com/docker/compose/releases/download/v2.29.7/docker-compose-linux-x86_64" \
+  -o /usr/local/lib/docker/cli-plugins/docker-compose
+chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
+param() {
+  aws ssm get-parameter --region "${region}" --with-decryption --name "/${name}/$1" \
+    --query Parameter.Value --output text
+}
+
+APP_DIR=/opt/tickettide
+mkdir -p $APP_DIR
+cd $APP_DIR
+
+DB_PASSWORD=$(param db-password)
+umask 077
+cat > common.env <<ENV
+JWT_SECRET=$(param jwt-secret)
+INTERNAL_API_KEY=$(param internal-api-key)
+DB_USERNAME=${db_username}
+DB_PASSWORD=$DB_PASSWORD
+AWS_REGION=${region}
+ENV
+cat > auth.env <<ENV
+BOOTSTRAP_ADMIN_EMAIL=${bootstrap_admin_email}
+BOOTSTRAP_ADMIN_PASSWORD=$(param bootstrap-admin-password)
+ENV
+
+# Database-per-service on the shared RDS instance (idempotent).
+for db in tickettide_auth tickettide_events tickettide_tickets tickettide_payments tickettide_notifications; do
+  docker run --rm -e PGPASSWORD="$DB_PASSWORD" postgres:16-alpine \
+    sh -c "psql -h ${db_host} -U ${db_username} -d postgres -tc \"SELECT 1 FROM pg_database WHERE datname='$db'\" | grep -q 1 \
+           || psql -h ${db_host} -U ${db_username} -d postgres -c \"CREATE DATABASE $db\""
+done
+
+cat > docker-compose.yml <<'YAML'
+name: tickettide
+x-service: &service
+  restart: always
+  env_file: [common.env]
+  network_mode: host
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "3" }
+services:
+  auth-service:
+    <<: *service
+    image: ${registry}/${name}/auth-service:${image_tag}
+    env_file: [common.env, auth.env]
+    environment:
+      PORT: "8081"
+      DB_URL: jdbc:postgresql://${db_host}:5432/tickettide_auth
+  event-service:
+    <<: *service
+    image: ${registry}/${name}/event-service:${image_tag}
+    environment:
+      PORT: "8082"
+      DB_URL: jdbc:postgresql://${db_host}:5432/tickettide_events
+      S3_BUCKET: ${s3_bucket}
+  ticket-service:
+    <<: *service
+    image: ${registry}/${name}/ticket-service:${image_tag}
+    environment:
+      PORT: "8083"
+      DB_URL: jdbc:postgresql://${db_host}:5432/tickettide_tickets
+      EVENT_SERVICE_URL: http://localhost:8082
+      NOTIFICATION_SERVICE_URL: http://localhost:8085
+  payment-service:
+    <<: *service
+    image: ${registry}/${name}/payment-service:${image_tag}
+    environment:
+      PORT: "8084"
+      DB_URL: jdbc:postgresql://${db_host}:5432/tickettide_payments
+      TICKET_SERVICE_URL: http://localhost:8083
+  notification-service:
+    <<: *service
+    image: ${registry}/${name}/notification-service:${image_tag}
+    environment:
+      PORT: "8085"
+      DB_URL: jdbc:postgresql://${db_host}:5432/tickettide_notifications
+YAML
+
+aws ecr get-login-password --region "${region}" | docker login --username AWS --password-stdin "${registry}"
+docker compose pull
+docker compose up -d
