@@ -15,6 +15,7 @@ import com.tickettide.ticket.domain.OrderRepository;
 import com.tickettide.ticket.domain.OrderStatus;
 import com.tickettide.ticket.domain.Ticket;
 import com.tickettide.ticket.domain.TicketRepository;
+import com.tickettide.ticket.domain.TicketStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -147,8 +148,12 @@ public class OrderService {
         if (!paymentId.equals(order.getPaymentId())) {
             throw ApiException.conflict("Payment does not belong to this order");
         }
+        List<Ticket> orderTickets = tickets.findByOrderId(order.getId());
+        if (orderTickets.stream().anyMatch(t -> t.getStatus() == TicketStatus.CHECKED_IN)) {
+            throw ApiException.conflict("Order has tickets that were already used for entry");
+        }
         transition(order::refund);
-        tickets.findByOrderId(order.getId()).forEach(Ticket::voidTicket);
+        orderTickets.forEach(Ticket::voidTicket);
         eventClient.release(order.getTicketTypeId(), order.getQuantity());
 
         AfterCommit.run(() -> notifications.send(new NotificationRequest(order.getUserId(), order.getUserEmail(),
