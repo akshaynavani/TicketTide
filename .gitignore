@@ -1,0 +1,39 @@
+# Maven / Java
+target/
+*.class
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+hs_err_pid*.log
+replay_pid*.log
+
+# IDEs
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+.factorypath
+out/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets / local config
+.env
+*.env.local
+application-local.yml
+
+# Terraform
+infra/terraform/.terraform/
+infra/terraform/.terraform.lock.hcl
+infra/terraform/*.tfstate
+infra/terraform/*.tfstate.*
+infra/terraform/*.tfvars
+infra/terraform/crash.log
+infra/terraform/tfplan
+
+# Logs
+*.log
+logs/
